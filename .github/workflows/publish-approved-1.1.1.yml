@@ -1,0 +1,100 @@
+name: Publicar Android 1.1.1 aprovado
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/publish-approved-1.1.1.yml]
+permissions:
+  contents: write
+concurrency:
+  group: publicar-android-1.1.1
+  cancel-in-progress: false
+jobs:
+  publicar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TRANSPORT_BLOB: a1cfac4239dabeab409af8adde1601c77ef650c1
+    steps:
+      - name: Recuperar e conferir APK homologado
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/git/blobs/$TRANSPORT_BLOB" > transport.json
+          python3 - <<'PY'
+          import base64,hashlib,json,os,urllib.request,zipfile
+          from pathlib import Path
+          from urllib.parse import urlparse
+          envelope=json.loads(Path('transport.json').read_text())
+          data=json.loads(base64.b64decode(envelope['content']))
+          url=data['url']
+          assert urlparse(url).scheme=='https' and urlparse(url).hostname.endswith('.oaiusercontent.com')
+          print('::add-mask::'+url)
+          urllib.request.urlretrieve(url,'approved.zip')
+          assert hashlib.sha256(Path('approved.zip').read_bytes()).hexdigest()=='ccb5fbb330ec9cff24bbec2452af0733fe4f23921850ff05e1dfefd62f91c18c'
+          root=Path('dist');root.mkdir()
+          with zipfile.ZipFile('approved.zip') as z:
+              old='Sistema-Pescador-Android-v1.1.1-rc.2.apk'
+              assert set(z.namelist())=={old,'release-manifest.json','release-notes.md','SHA256SUMS.txt'}
+              m=json.loads(z.read('release-manifest.json'))
+              assert m['tag']=='v1.1.1-rc.2' and m['version_name']=='1.1.1' and m['version_code']==5
+              assert m['source_commit']=='db70ac9c45207d33c864364ea9caacb401223cdd'
+              assert m['application_id']=='br.com.sistemapescador.sistema_pescador_mobile'
+              assert m['certificate_sha256']=='0a846ca9f3cb403255fdd32e2ecf8056a7c76c8c6c3e7a36263a3ce3c294c10d'
+              apk=z.read(old);digest=hashlib.sha256(apk).hexdigest()
+              assert digest==m['sha256']=='87c30e35e458cf4e1dfd8ffb8b33d3c06260b69170e3f02728d4916ee350d5e4'
+              assert z.read('SHA256SUMS.txt').decode().strip()==digest+'  '+old
+              name='Sistema-Pescador-Android-v1.1.1.apk'
+              (root/name).write_bytes(apk)
+          m.update(tag='v1.1.1',approved=True,channel='stable',candidate_tag='v1.1.1-rc.2',source_run=38086243031,requires_reinstall_from_previous_signature=True)
+          (root/'release-manifest.json').write_text(json.dumps(m,indent=2)+'\n')
+          (root/'SHA256SUMS.txt').write_text(digest+'  '+name+'\n')
+          notes="""# Sistema Pescador Android 1.1.1 — Marlin
+
+          Versao aprovada em aparelho real pelo responsavel. Este e exatamente o APK
+          homologado como v1.1.1-rc.2, sem recompilacao (Android 1.1.1, build 5).
+
+          - Agenda compartilhada com o desktop conforme permissoes da conta.
+          - Login com duas etapas e codigos de recuperacao.
+          - Lembretes opcionais com o aplicativo aberto.
+          - Assistentes mantem acesso de consulta restrito, sem ampliar permissoes.
+          - Filtros, documentos e compartilhamento preservados.
+
+          ## Instalacao e atualizacao
+          Quem usa versoes com a assinatura antiga (1.0.0 ou 1.1.0-rc.2) precisa
+          reinstalar e entrar novamente. Antes de desinstalar, confirme envios pendentes
+          e guarde arquivos locais necessarios. Preferencias locais podem ser perdidas.
+          Os dados ja salvos no servidor nao sao alterados por essa instalacao.
+          Quem ja instalou a candidata 1.1.1-rc.2 aprovada possui este mesmo aplicativo.
+
+          Push com o aplicativo fechado ainda nao esta habilitado. Nao exige novo backend.
+          Downloads e orientacoes: https://sistemapescador.com.br/area
+          """
+          Path('notes.md').write_text(notes)
+          expected={p.name:{'size':p.stat().st_size,'digest':'sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()} for p in root.iterdir()}
+          Path('expected.json').write_text(json.dumps(expected))
+          PY
+      - name: Publicar estavel somente apos conferir os anexos
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/releases?per_page=100" --paginate --slurp > before.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          assert not any(r['tag_name']=='v1.1.1' for page in json.loads(Path('before.json').read_text()) for r in page), 'Versao ja existe; nao sobrescrever'
+          PY
+          gh release create v1.1.1 --repo "$GH_REPO" --target "$GITHUB_SHA" --draft --title 'Android 1.1.1 — Marlin' --notes-file notes.md dist/*
+          gh api "repos/$GH_REPO/releases?per_page=100" --paginate --slurp > uploaded.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          rows=[r for page in json.loads(Path('uploaded.json').read_text()) for r in page if r['tag_name']=='v1.1.1']
+          assert len(rows)==1 and rows[0]['draft'] is True
+          r=rows[0];expected=json.loads(Path('expected.json').read_text())
+          assert len(r['assets'])==len(expected) and {a['name'] for a in r['assets']}==set(expected)
+          for a in r['assets']:
+              assert a['state']=='uploaded' and a['size']==expected[a['name']]['size'] and a['digest']==expected[a['name']]['digest']
+          Path('release-id.txt').write_text(str(r['id']))
+          PY
+          release_id=$(cat release-id.txt)
+          gh api "repos/$GH_REPO/releases/$release_id" --method PATCH -F draft=false -F prerelease=false -f make_latest=true --jq '{tag_name,draft,prerelease,html_url}'
