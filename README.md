@@ -1,34 +1,9 @@
-# Sistema Pescador — Android
+# Sistema Pescador Android
 
-Aplicativo Android oficial do **Sistema Pescador**.
+Versão estável: **1.1.1 — Marlin**, Android build 5.
 
-## Download
+Acesse os downloads e orientações na [área de usuários](https://sistemapescador.com.br/area).
 
-### [Baixar Sistema Pescador Android v1.0.0](https://github.com/j4xmine/sistema-pescador-android-download/releases/latest/download/Sistema-Pescador-Android-v1.0.0.apk)
+A versão usa uma nova assinatura. Usuários de versões anteriores precisam confirmar envios pendentes, guardar arquivos locais necessários, reinstalar e entrar novamente. A candidata 1.1.1-rc.2 já corresponde a este mesmo APK.
 
-**Versão:** 1.0.0
-**Build:** 1
-**Formato:** APK
-
-## Verificação
-
-SHA-256 do APK oficial:
-
-`736E9F648B3172378D0FCEF25C5BB34A1CC68DBDEA3131556FDAE387B99DFF9B`
-
-O mesmo checksum também está disponível em `SHA256SUMS.txt`.
-
-## Como instalar
-
-1. Toque no link de download acima.
-2. Abra o APK baixado no dispositivo Android.
-3. Caso o Android solicite, autorize a instalação para o navegador ou gerenciador de arquivos utilizado.
-4. Instale e abra o **Sistema Pescador**.
-
-## Atualizações
-
-As próximas versões Android serão disponibilizadas neste mesmo repositório.
-
----
-
-**Sistema Pescador**
+O arquivo `android-update.json` identifica a versão aprovada e sua integridade.
